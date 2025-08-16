@@ -208,6 +208,7 @@ type BaseFiberRootProperties = {|
   callbackPriority: LanePriority,
   eventTimes: LaneMap<number>,
   expirationTimes: LaneMap<number>,
+  earliestExpirationTime: number,
 
   pendingLanes: Lanes,
   suspendedLanes: Lanes,

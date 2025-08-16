@@ -411,14 +411,17 @@ export function markStarvedLanesAsExpired(
   root: FiberRoot,
   currentTime: number,
 ): void {
-  // TODO: This gets called every time we yield. We can optimize by storing
-  // the earliest expiration time on the root. Then use that to quickly bail out
-  // of this function.
+  if (root.earliestExpirationTime !== NoTimestamp && 
+      currentTime < root.earliestExpirationTime) {
+    return;
+  }
 
   const pendingLanes = root.pendingLanes;
   const suspendedLanes = root.suspendedLanes;
   const pingedLanes = root.pingedLanes;
   const expirationTimes = root.expirationTimes;
+
+  let earliestExpirationTime = NoTimestamp;
 
   // Iterate through the pending lanes and check if we've reached their
   // expiration time. If so, we'll assume the update is being starved and mark
@@ -438,15 +441,32 @@ export function markStarvedLanesAsExpired(
         (lane & pingedLanes) !== NoLanes
       ) {
         // Assumes timestamps are monotonically increasing.
-        expirationTimes[index] = computeExpirationTime(lane, currentTime);
+        const newExpirationTime = computeExpirationTime(lane, currentTime);
+        expirationTimes[index] = newExpirationTime;
+        
+        // Track the earliest expiration time
+        if (earliestExpirationTime === NoTimestamp || 
+            newExpirationTime < earliestExpirationTime) {
+          earliestExpirationTime = newExpirationTime;
+        }
       }
-    } else if (expirationTime <= currentTime) {
-      // This lane expired
-      root.expiredLanes |= lane;
+    } else {
+      if (earliestExpirationTime === NoTimestamp || 
+          expirationTime < earliestExpirationTime) {
+        earliestExpirationTime = expirationTime;
+      }
+      
+      if (expirationTime <= currentTime) {
+        // This lane expired
+        root.expiredLanes |= lane;
+      }
     }
 
     lanes &= ~lane;
   }
+  
+  // Update the cached earliest expiration time
+  root.earliestExpirationTime = earliestExpirationTime;
 }
 
 // This returns the highest priority pending lanes regardless of whether they
